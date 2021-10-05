@@ -18,6 +18,9 @@ import chess.pgn
 import random
 from tensorflow import keras
 import numpy
+import threading
+
+
 
 #### put in own functions file
 
@@ -588,7 +591,8 @@ class ChessGameMaster:
             if self.check_status_flags([player_1, player_2]) == "OK":
                 # ready to play game
                 try:
-                    self.play_chess(player_1, player_2)
+                    # launch game between two players in its own thread
+                    threading.Thread(target=self.play_chess, args=(player_1, player_2,)).start()
                 except:
                     # other error flag
                     status_flag = -3
