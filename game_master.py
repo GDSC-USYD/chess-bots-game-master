@@ -120,6 +120,7 @@ class Player:
         self.scores = [] # list of their match scores (used to calculate elo)
         self.model = None # entire model downloaded and stored
         self.colour = None # set to "white" or "black" each game
+        self.game_threads = []
         # status flags:
         # 0 just created (no model link provided)
         # 1 model link added
@@ -592,7 +593,8 @@ class ChessGameMaster:
                 # ready to play game
                 try:
                     # launch game between two players in its own thread
-                    threading.Thread(target=self.play_chess, args=(player_1, player_2,)).start()
+                    t = threading.Thread(target=self.play_chess, args=(player_1, player_2,)).start()
+                    self.game_threads.append(t)
                 except:
                     # other error flag
                     status_flag = -3
@@ -608,6 +610,11 @@ class ChessGameMaster:
                     self.matches.append(Match(player_1.player_id, None, player_2.player_id, None, None, self.batch_id, None, status_flag))
 
         elo_status = "OK"
+
+        # wait for games to finish
+        for t in self.game_threads:
+            t.join()
+
         try:
             # finished games
             for player in self.players:
