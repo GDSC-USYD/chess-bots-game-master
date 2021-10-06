@@ -501,6 +501,9 @@ class ChessGameMaster:
                 except:
                     # error getting move from player 1
                     player_1.status_flag = -3
+                    # add match information with error flag
+                    status_flag = -3
+                    self.matches.append(Match(player_1.player_id, None, player_2.player_id, None, None, self.batch_id, None, status_flag))
                     # stop playing
                     return
 
@@ -518,6 +521,9 @@ class ChessGameMaster:
             except:
                 # error getting move from player 2
                 player_2.status_flag = -3
+                # add match information with error flag
+                status_flag = -3
+                self.matches.append(Match(player_1.player_id, None, player_2.player_id, None, None, self.batch_id, None, status_flag))
                 # stop playing
                 return
 
@@ -609,12 +615,6 @@ class ChessGameMaster:
                     t = threading.Thread(target=self.play_chess, args=(player_1, player_2,))
                     t.start()
                     self.game_threads.append(t)
-
-                    # check and handle model usage errors
-                    player_error_flags = [p.status_flag for p in [player_1, player_2] if p.status_flag == -3]
-                    status_flag = -3
-                    if len(player_error_flags) > 0:
-                        self.matches.append(Match(player_1.player_id, None, player_2.player_id, None, None, self.batch_id, None, status_flag))
 
                 except:
                     # other error flag
