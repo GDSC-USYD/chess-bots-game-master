@@ -520,7 +520,7 @@ class ChessGameMaster:
                 player_2.status_flag = -3
                 # stop playing
                 return
-                
+
             board.push(move)
             # save in PGN
             node = node.add_variation(move)
@@ -613,7 +613,8 @@ class ChessGameMaster:
                     # check and handle model usage errors
                     player_error_flags = [p.status_flag for p in [player_1, player_2] if p.status_flag == -3]
                     status_flag = -3
-                    self.matches.append(Match(player_1.player_id, None, player_2.player_id, None, None, self.batch_id, None, status_flag))
+                    if len(player_error_flags) > 0:
+                        self.matches.append(Match(player_1.player_id, None, player_2.player_id, None, None, self.batch_id, None, status_flag))
 
                 except:
                     # other error flag
