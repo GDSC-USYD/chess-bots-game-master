@@ -19,6 +19,7 @@ import random
 from tensorflow import keras
 import numpy
 import threading
+#import pickle
 
 
 
@@ -312,7 +313,7 @@ class ChessGameMaster:
         return "OK"
 
 
-    def play_chess(self, player_1, player_2):
+    def play_chess(self, player_1, player_2, fen=None):
         """
         Plays a game of chess between two provided players.
 
@@ -467,116 +468,162 @@ class ChessGameMaster:
         Chess Match
         """
 
-        ### INITIALISE MATCH ###
+        if player_1 == "Human":
+            ### INITIALISE HUMAN VS. BOT MATCH ###
 
-        ## define pgn attributes
-        now = datetime.now(timezone.utc) + timedelta(hours=10)
-        board = chess.Board()
-        game = chess.pgn.Game()
-        game.headers["Event"] = "Bot VS Bot"
-        game.headers["Site"] = "Sydney"
-        game.headers["Date"] = now.strftime("%d/%m/%Y")
-        game.headers["Round"] = str(self.get_round())
 
-        ##Should be changed to players Ids/names
-        game.headers["White"] = player_1.name
-        game.headers["Black"] = player_2.name
-        player_1.colour = "white"
-        player_2.colour = "black"
 
-        game.setup(board)
-        node = game
 
-        ### START MATCH ###
-        iteration = 0
-        minmax_depth = 1
-        while True:
-            # Player 1 move
-            # set random starting point everytime
-            if iteration == 0:
-                move = random.choice([move for move in board.legal_moves])
-            else:
+            ## create board with fen
+            board = chess.Board(fen)
+            print("board \n", board)
+            game = chess.pgn.Game()
+            ## apply fen as starting board
+            game.setup(board)
+            node = game
+
+            if board.is_game_over():
+                status = "Error"
+                # error: stop playing
+                return status, fen
+
+            #print("game\n", game)
+
+            print(f"Starting Match Between Human and Bot: {player_2.player_id}")
+            # try get ai move
+            minmax_depth = 1
+            try:
+                move = get_ai_move(board, minmax_depth, player_2)
+            except Exception as e:
+                print("Error getting move from player 2:", str(e))
+                # error: stop playing
+                status = str(e)
+                return status, fen
+
+            board.push(move)
+            # save in PGN
+            node = node.add_variation(move)
+            #print(f'\n{board}')
+            status = "OK"
+            # convert new board to fen
+            fen = board.fen()
+            # return status and fen
+            return status, fen
+
+
+        else:
+            ### INITIALISE BOT VS. BOT MATCH ###
+
+            ## define pgn attributes
+            now = datetime.now(timezone.utc) + timedelta(hours=10)
+            board = chess.Board()
+            game = chess.pgn.Game()
+            game.headers["Event"] = "Bot VS Bot"
+            game.headers["Site"] = "Sydney"
+            game.headers["Date"] = now.strftime("%d/%m/%Y")
+            game.headers["Round"] = str(self.get_round())
+
+            ##Should be changed to players Ids/names
+            game.headers["White"] = player_1.name
+            game.headers["Black"] = player_2.name
+            player_1.colour = "white"
+            player_2.colour = "black"
+
+            game.setup(board)
+            node = game
+
+            ### START MATCH ###
+            print(f"Starting Match Between {player_1.name} and {player_2.name}")
+            iteration = 0
+            minmax_depth = 1
+            while True:
+                # Player 1 move
+                # set random starting point everytime
+                if iteration == 0:
+                    move = random.choice([move for move in board.legal_moves])
+                else:
+                    try:
+                        move = get_ai_move(board, minmax_depth, player_1)
+                    except:
+                        # error getting move from player 1
+                        player_1.status_flag = -3
+                        # add match information with error flag
+                        status_flag = -3
+                        self.matches.append(Match(player_1.player_id, None, player_2.player_id, None, None, self.batch_id, None, status_flag))
+                        # stop playing
+                        return
+
+                iteration += 1
+                board.push(move)
+                # save in PGN
+                node = node.add_variation(move)
+                #print(f'\n{board}')
+                if board.is_game_over():
+                    break
+
+                # Player 2 move
                 try:
-                    move = get_ai_move(board, minmax_depth, player_1)
+                    move = get_ai_move(board, minmax_depth, player_2)
                 except:
-                    # error getting move from player 1
-                    player_1.status_flag = -3
+                    # error getting move from player 2
+                    player_2.status_flag = -3
                     # add match information with error flag
                     status_flag = -3
                     self.matches.append(Match(player_1.player_id, None, player_2.player_id, None, None, self.batch_id, None, status_flag))
                     # stop playing
                     return
 
-            iteration += 1
-            board.push(move)
-            # save in PGN
-            node = node.add_variation(move)
-            #print(f'\n{board}')
-            if board.is_game_over():
-                break
+                board.push(move)
+                # save in PGN
+                node = node.add_variation(move)
+                #print(f'\n{board}')
+                if board.is_game_over():
+                    break
 
-            # Player 2 move
-            try:
-                move = get_ai_move(board, minmax_depth, player_2)
-            except:
-                # error getting move from player 2
-                player_2.status_flag = -3
-                # add match information with error flag
-                status_flag = -3
-                self.matches.append(Match(player_1.player_id, None, player_2.player_id, None, None, self.batch_id, None, status_flag))
-                # stop playing
-                return
+            game.headers["Result"] = board.result()
 
-            board.push(move)
-            # save in PGN
-            node = node.add_variation(move)
-            #print(f'\n{board}')
-            if board.is_game_over():
-                break
-
-        game.headers["Result"] = board.result()
-
-        ##PGN should be stored here (game)
-        #print(game) # pgn
-        #print(game, file=open("/content/drive/MyDrive/Chess/pgnMatch.txt", "w"), end="\n\n")
+            ##PGN should be stored here (game)
+            #print(game) # pgn
+            #print(game, file=open("/content/drive/MyDrive/Chess/pgnMatch.txt", "w"), end="\n\n")
 
 
-        #Compute Score (based on winner loser and length of the match)
-        #the shorter the match the better the score for the winner
-        #Should be normalized first
-        #If you apply a 50-move limit, the longest possible chess game is 5898.5 moves long.
+            #Compute Score (based on winner loser and length of the match)
+            #the shorter the match the better the score for the winner
+            #Should be normalized first
+            #If you apply a 50-move limit, the longest possible chess game is 5898.5 moves long.
 
-        if game.headers["Result"] =='1-0':
-            #player1_score = ((400 *1/iteration)-(0))/(400-0)
-            #player2_score = ((-400 *iteration)-(-400*5898.5))/((0)-((-400*5898.5)))
-            # Using ELO calculations
-            player1_score = (player_2.elo_score + 400)
-            player2_score = (player_1.elo_score - 400)
-            winner_id = player_1.player_id
-            status_flag = 1 # OK
-        elif game.headers["Result"] =='0-1':
-            #player1_score = ((-400 *iteration)-(-400*5898.5))/((0)-((-400*5898.5)))
-            #player2_score = ((400 *1/iteration)-(0))/(400-0)
-            player1_score = (player_2.elo_score - 400)
-            player2_score = (player_1.elo_score + 400)
-            winner_id = player_2.player_id
-            status_flag = 1 # OK
-        else:
-            #player1_score = ((200 *iteration)-(0))/((200*5898.5)-(0))
-            #player2_score = ((200 *iteration)-(0))/((200*5898.5)-(0))
-            player1_score = player_2.elo_score
-            player2_score = player_1.elo_score
-            winner_id = None
-            status_flag = 2 # OK BUT Tied Match
+            if game.headers["Result"] =='1-0':
+                #player1_score = ((400 *1/iteration)-(0))/(400-0)
+                #player2_score = ((-400 *iteration)-(-400*5898.5))/((0)-((-400*5898.5)))
+                # Using ELO calculations
+                player1_score = (player_2.elo_score + 400)
+                player2_score = (player_1.elo_score - 400)
+                winner_id = player_1.player_id
+                status_flag = 1 # OK
+            elif game.headers["Result"] =='0-1':
+                #player1_score = ((-400 *iteration)-(-400*5898.5))/((0)-((-400*5898.5)))
+                #player2_score = ((400 *1/iteration)-(0))/(400-0)
+                player1_score = (player_2.elo_score - 400)
+                player2_score = (player_1.elo_score + 400)
+                winner_id = player_2.player_id
+                status_flag = 1 # OK
+            else:
+                #player1_score = ((200 *iteration)-(0))/((200*5898.5)-(0))
+                #player2_score = ((200 *iteration)-(0))/((200*5898.5)-(0))
+                player1_score = player_2.elo_score
+                player2_score = player_1.elo_score
+                winner_id = None
+                status_flag = 2 # OK BUT Tied Match
 
-        player_1.scores.append(player1_score)
-        player_2.scores.append(player2_score)
+            player_1.scores.append(player1_score)
+            player_2.scores.append(player2_score)
 
-        #print(f"Player 1 score: {player1_score}")
-        #print(f"Player 2 score: {player2_score}")
+            #print(f"Player 1 score: {player1_score}")
+            #print(f"Player 2 score: {player2_score}")
 
-        # create a match object and add it to the matches list!
-        self.matches.append(Match(player_1.player_id, player1_score, player_2.player_id, player2_score, game, self.batch_id, winner_id, status_flag))
+            # create a match object and add it to the matches list!
+            self.matches.append(Match(player_1.player_id, player1_score, player_2.player_id, player2_score, game, self.batch_id, winner_id, status_flag))
+            print(f"Completed Match Between {player_1.name} and {player_2.name}")
 
 
     def get_round(self):
@@ -598,7 +645,7 @@ class ChessGameMaster:
         """
         After init calls game functions and database functions
         """
-
+        print("Running")
         # initialise
         self.players = self.initialise_players()
         self.batch_id = self.get_batch_id()
@@ -612,7 +659,7 @@ class ChessGameMaster:
                 # ready to play game
                 try:
                     # launch game between two players in its own thread
-                    t = threading.Thread(target=self.play_chess, args=(player_1, player_2,))
+                    t = threading.Thread(target=self.play_chess, args=(player_1, player_2, None,))
                     t.start()
                     self.game_threads.append(t)
 
@@ -657,49 +704,68 @@ class ChessGameMaster:
         return launch_status
 
 
-    def start_game(self, bot_player_id, fen):
+    def get_ai_move_from_fen(self, fen, bot_player):
+        status = "OK"
 
-        db_check_message, bot_model = db_get_player_model(self.conn, bot_player_id)
+        try:
+            # get ai move, ai is always black
+            status, fen = self.play_chess("Human", bot_player, fen)
+
+        except Exception as e:
+            print("Error:", str(e))
+            status = str(e)
+
+        return status, fen
+
+
+    def bot_move(self, bot_player_id, fen):
+
+        db_check_message = "OK"
+        # get locally saved model path
+        filename = f"{bot_player_id}.h5"
+        model_path = os.path.join(os.path.join(os.getcwd(), "final_models"), filename)
+
+        try:
+            # try locate model locally
+            #with open(model_path, 'rb') as f:
+            #if os.path.isfile(model_path):
+            bot_model = keras.models.load_model(model_path)
+            print("Loaded model")
+        except Exception as e:
+            print(str(e))
+            # download model and save locally
+            with open(model_path, 'wb') as f:
+                # get bot_player_id model
+                db_check_message, binary_bot_model = db_get_player_model(self.conn, bot_player_id)
+                #print(binary_bot_model)
+                if db_check_message == "OK":
+                    f.write(binary_bot_model)
+                    #pickle.dump(pickled_bot_model, f, pickle.HIGHEST_PROTOCOL)
+                    bot_model = keras.models.load_model(model_path)
+                else:
+                    print("Error loading bot model from db:", db_check_message)
+
 
         # do something to the fen
         if db_check_message == "OK":
-            print("Adding next move to fen with bot model")
+            player_id = bot_player_id
+            status_flag = 2
+            bot_player = Player(bot_player_id, None, None, None, None)
+            bot_player.model = bot_model
+            bot_player.colour = "black"
+
+            status, fen = self.get_ai_move_from_fen(fen, bot_player)
 
 
-        # create new ongoing match
-        db_upload_message, ongoing_match_id = db_insert_new_ongoing_match(self.conn, fen, bot_player_id)
+            if status == "OK":
+                print("Move OK")
+            else:
+                # Error or game already completed
+                print("Error:", status)
 
-        return db_upload_message, ongoing_match_id, fen
+            return status, fen
 
-
-    def next_move(self, bot_player_id, fen, ongoing_match_id):
-
-        # get fen from existing ongoing match
-        db_check_message, fen = db_get_ongoing_match_fen(self.conn, ongoing_match_id)
-
-        if db_check_message == "OK":
-            # get bot_player_id model
-            db_check_message, bot_model = db_get_player_model(self.conn, bot_player_id)
-
-            if db_check_message == "OK":
-
-                print("Checking if fen is complete / match done")
-                # if game is completed
-                    # add ongoing match to matches as completed match
-                    # delete ongoing match
-
-                # do something to fen IF match not complete
-                print("Adding next move to fen with bot model")
-
-                # if game is completed
-                    # add ongoing match to matches as completed match
-                    # delete ongoing match
-
-                print("Checking if fen is complete / match done")
-
-        return db_check_message, ongoing_match_id, fen
-
-
+        return db_check_message, fen
 
 
 if __name__ == "__main__":

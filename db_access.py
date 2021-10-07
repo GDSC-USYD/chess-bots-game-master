@@ -5,6 +5,31 @@ import pymysql.cursors
 import re
 
 
+def db_update_player_model(conn, player_id, model):
+    """
+    Updates player data in db according to given -> db connection & player id
+    Called by Chess Game Master after a batch of chess games
+
+    Updates:
+    # player.elo_score
+    # player.status_flag
+
+    Returns -> db_upload_message
+    """
+    db_upload_message = "OK"
+
+    try:
+        #query = f"UPDATE players SET model={model} WHERE player_id={player_id};"
+        query = "UPDATE players SET model=(%s) WHERE player_id=(%s);"
+        #conn.execute(f"UPDATE players SET model={model} WHERE player_id={player_id};")
+        conn.execute(query, ( model, player_id, ))
+
+        return db_upload_message
+    except Exception as e:
+        print(e)
+        db_upload_message = str(e)
+        return db_upload_message
+
 
 def db_update_player_data(conn, player):
     """
@@ -30,53 +55,53 @@ def db_update_player_data(conn, player):
 
 
 
-def db_insert_new_ongoing_match(conn, fen, bot_player_id):
-    """
-    Inserts new ongoing match in db according to given -> db connection, fen &  bot_player_id
-    Called by Chess Game Master after receiving a new start game command
-
-    Returns -> db_upload_message, ongoing_match_id
-    """
-    db_upload_message = "OK"
-    ongoing_match_id = -1
-
-    try:
-        ongoing_match_id = conn.execute(
-        f"INSERT INTO ongoing_matches (fen, bot_player_id) VALUES ('{fen}', {bot_player_id});"
-        ).lastrowid
-
-        return db_upload_message, ongoing_match_id
-    except Exception as e:
-        db_upload_message = str(e)
-        return db_upload_message, ongoing_match_id
-
-
-
-def db_get_ongoing_match_fen(conn, ongoing_match_id):
-    """
-    Retrieves fen from db for ongoing match or None if no fen found given -> ongoing_match_id
-    Returns -> db_check_message, model | db_check_message, None
-    """
-    db_check_message = "OK"
-
-    db_query = conn.execute(
-        f"SELECT fen FROM ongoing_matches WHERE ongoing_match_id={ongoing_match_id};"
-    ).fetchone()
+# def db_insert_new_ongoing_match(conn, fen, bot_player_id):
+#     """
+#     Inserts new ongoing match in db according to given -> db connection, fen &  bot_player_id
+#     Called by Chess Game Master after receiving a new start game command
+#
+#     Returns -> db_upload_message, ongoing_match_id
+#     """
+#     db_upload_message = "OK"
+#     ongoing_match_id = -1
+#
+#     try:
+#         ongoing_match_id = conn.execute(
+#         f"INSERT INTO ongoing_matches (fen, bot_player_id) VALUES ('{fen}', {bot_player_id});"
+#         ).lastrowid
+#
+#         return db_upload_message, ongoing_match_id
+#     except Exception as e:
+#         db_upload_message = str(e)
+#         return db_upload_message, ongoing_match_id
 
 
-    if db_query != None:
-        fen = db_query[0] # Tuple with one entry if found
-    else:
-        fen = db_query # None if not found
-        db_check_message = "No model found"
 
-    return db_check_message, fen
+# def db_get_ongoing_match_fen(conn, ongoing_match_id):
+#     """
+#     Retrieves fen from db for ongoing match or None if no fen found given -> ongoing_match_id
+#     Returns -> db_check_message, model | db_check_message, None
+#     """
+#     db_check_message = "OK"
+#
+#     db_query = conn.execute(
+#         f"SELECT fen FROM ongoing_matches WHERE ongoing_match_id={ongoing_match_id};"
+#     ).fetchone()
+#
+#
+#     if db_query != None:
+#         fen = db_query[0] # Tuple with one entry if found
+#     else:
+#         fen = db_query # None if not found
+#         db_check_message = "No model found"
+#
+#     return db_check_message, fen
 
 
 
 def db_get_player_model(conn, player_id):
     """
-    Retrieves model from db or None if no model found given -> player_id
+    Retrieves binary model (.h5 file) from db or None if not found given -> player_id
     Returns -> db_check_message, model | db_check_message, None
     """
     db_check_message = "OK"
@@ -85,11 +110,12 @@ def db_get_player_model(conn, player_id):
         f"SELECT model FROM players WHERE player_id={player_id};"
     ).fetchone()
 
-    model = db_query # None if no model found
-    if model == None:
+    binary_model = db_query # None if no model found
+    if binary_model == None:
         db_check_message = "No model found"
-
-    return db_check_message, model
+    else:
+        binary_model = binary_model[0] # extract from tuple
+    return db_check_message, binary_model
 
 
 
