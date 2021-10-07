@@ -729,6 +729,8 @@ class ChessGameMaster:
             # try locate model locally
             #with open(model_path, 'rb') as f:
             #if os.path.isfile(model_path):
+            if not os.path.exists('final_models'):
+                os.makedirs('final_models')
             bot_model = keras.models.load_model(model_path)
             print("Loaded model")
         except Exception as e:
